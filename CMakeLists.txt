@@ -19,8 +19,10 @@ link_directories(${MOSQUITTO_LIBRARY_DIRS}
                  ${JSON_LIBRARY_DIRS}
                  ${INFLUX_DB_LIBRARY_DIRS})
 
-set(SRCS ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c)
-
+set(SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/json_parser.c
+    )
 
 add_executable(main ${SRCS})
 
