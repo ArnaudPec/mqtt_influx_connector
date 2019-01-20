@@ -68,7 +68,7 @@ typedef struct conf_
     Mqtt_Conf   mqtt;
 } Conf;
 
-int parse_configuration(char *path, Mqtt_Conf *mqtt, Ttn_Conf *ttn);
+int parse_configuration(const char *path, Mqtt_Conf *mqtt, Ttn_Conf *ttn);
 
 #endif
 

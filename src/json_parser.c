@@ -3,57 +3,103 @@
 #include <string.h>
 #include "json_parser.h"
 
-int _json_parser_mqtt_conf_fill(json_object *jobj, Mqtt_Conf *mqtt);
-int _json_parser_ttn_conf_fill(json_object *jobj, Ttn_Conf *ttn);
+static int _json_parser_process_config_file(json_object **jobj, const char *path);
+static int _json_parser_mqtt_conf_fill(json_object *jobj, Mqtt_Conf *mqtt);
+static int _json_parser_ttn_conf_fill(json_object *jobj, Ttn_Conf *ttn);
+static int _json_parser_generic_conf(json_object *jobj, void **struct_to_fill,
+                                     const char *obj_name);
+static int _json_parser_print_mqtt_conf(Mqtt_Conf *mqtt);
+static int _json_parser_print_ttn_conf(Ttn_Conf *ttn);
 
 int
-parse_configuration(char *path, Mqtt_Conf *mqtt, Ttn_Conf *ttn)
+parse_configuration(const char *path, Mqtt_Conf *mqtt, Ttn_Conf *ttn)
 {
-    json_object *jobj, *mqtt_obj, *ttn_obj;
-    json_bool ret;
-    const char *json_util_last_error = NULL;
-    int ret_val;
+    json_object *jobj;
+    int ret;
 
-    jobj = json_object_from_file(path);
+    ret = _json_parser_process_config_file(&jobj, path);
+    if (ret)
+        return ret;
+
+    ret = _json_parser_generic_conf(jobj, (void *)mqtt, "Mqtt");
+    if (ret)
+        return ret;
+
+    ret = _json_parser_generic_conf(jobj, (void *)ttn, "Ttn");
+    if (ret)
+        return ret;
+
+    printf("Parsed configuration:\n");
+    _json_parser_print_mqtt_conf(mqtt);
+    _json_parser_print_ttn_conf(ttn);
+
+    return 0;
+}
+
+static int
+_json_parser_process_config_file(json_object **jobj, const char *path)
+{
+    const char *json_util_last_error = NULL;
+
+    *jobj = json_object_from_file(path);
     json_util_last_error = json_util_get_last_err();
     if (json_util_last_error)
     {
-        printf("Last error %s", json_util_last_error);
-        exit(EXIT_FAILURE);
-    }
-
-    ret = json_object_object_get_ex(jobj, "Mqtt", &mqtt_obj);
-    if (!ret) {
-        printf("Error. Mqtt object was not found in configuration\n");
+        printf("Error config file: %s", json_util_last_error);
         return -1;
     }
 
-    if (json_object_get_type(mqtt_obj) != json_type_object) {
+    return 0;
+}
+
+static int
+_json_parser_generic_conf(json_object *jobj, void **struct_to_fill,
+                          const char *obj_name)
+{
+    int ret_val;
+    json_bool ret;
+    json_object *sub_jobj;
+
+    ret = json_object_object_get_ex(jobj, obj_name, &sub_jobj);
+    if (!ret) {
+        printf("Error. %s object was not found in configuration\n", obj_name);
+        return -1;
+    }
+
+    if (json_object_get_type(sub_jobj) != json_type_object) {
         printf("Error\n");
         return -1;
     }
 
-    ret_val = _json_parser_mqtt_conf_fill(mqtt_obj, mqtt);
-    if (ret_val)
-        return -1;
-
-    ret = json_object_object_get_ex(jobj, "Ttn", &ttn_obj);
-    if (!ret) {
-        printf("Error. Ttn object was not found in configuration\n");
-        return -1;
-    }
-
-    if (json_object_get_type(ttn_obj) != json_type_object) {
-        printf("Error\n");
-        return -1;
-    }
-    ret_val = _json_parser_ttn_conf_fill(ttn_obj, ttn);
-    if (ret_val)
-        return -1;
-
-    printf("---\n%s\n---\n",
-            json_object_to_json_string_ext(mqtt_obj, JSON_C_TO_STRING_SPACED |
+    printf("%s object\n---\n%s\n---\n", obj_name,
+            json_object_to_json_string_ext(sub_jobj, JSON_C_TO_STRING_SPACED |
                 JSON_C_TO_STRING_PRETTY));
+
+    if (!strncmp("Mqtt", obj_name, sizeof(*obj_name)))
+    {
+        ret_val = _json_parser_mqtt_conf_fill(sub_jobj, (Mqtt_Conf *)struct_to_fill);
+    }
+    else if (!strncmp("Ttn", obj_name, sizeof(*obj_name)))
+    {
+        ret_val = _json_parser_ttn_conf_fill(sub_jobj, (Ttn_Conf *)struct_to_fill);
+    }
+    else
+    {
+        printf("Error. %s subobject is wrong. SHOULD never happen\n", obj_name);
+        return -1;
+    }
+
+    return ret_val;
+}
+
+static int
+_json_parser_print_mqtt_conf(Mqtt_Conf *mqtt)
+{
+    if (!mqtt)
+    {
+        printf("Error printing Mqtt conf, parameter is NULL\n");
+        return -1;
+    }
 
     printf("%s\n", mqtt->host);
     printf("%d\n", mqtt->port);
@@ -67,7 +113,28 @@ parse_configuration(char *path, Mqtt_Conf *mqtt, Ttn_Conf *ttn)
     return 0;
 }
 
-int
+static int
+_json_parser_print_ttn_conf(Ttn_Conf *ttn)
+{
+    if (!ttn)
+    {
+        printf("Error printing Ttn conf, parameter is NULL\n");
+        return -1;
+    }
+
+    printf("%s\n", ttn->host);
+    printf("%d\n", ttn->port);
+    printf("%s\n", ttn->app_id);
+    printf("%s\n", ttn->app_key);
+    printf("%s\n", ttn->region_handler);
+    printf("%s\n", ttn->topic);
+    printf("%s\n", ttn->client_id);
+
+    return 0;
+}
+
+
+static int
 _json_parser_mqtt_conf_fill(json_object *jobj, Mqtt_Conf *mqtt)
 {
     JSON_PARSER_CONF_FILL_STRING(jobj, mqtt->host, "Host");
@@ -82,7 +149,7 @@ _json_parser_mqtt_conf_fill(json_object *jobj, Mqtt_Conf *mqtt)
     return 0;
 }
 
-int
+static int
 _json_parser_ttn_conf_fill(json_object *jobj, Ttn_Conf *ttn)
 {
     JSON_PARSER_CONF_FILL_STRING(jobj, ttn->host, "Host");
